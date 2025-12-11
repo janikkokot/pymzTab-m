@@ -34,6 +34,7 @@ def test_no_sample(tmp_path):
     with warnings.catch_warnings(record=True) as w:
         mztabm: mztab_m_io.MzTabM = mztab_m_io.read(invalid_mztab)
         assert len(w) > 0
+        assert [isinstance(_w, mztab_m_io.model.mztabm.CrossCheckWarning) for _w in w]
 
 
 def test_no_assay(tmp_path):

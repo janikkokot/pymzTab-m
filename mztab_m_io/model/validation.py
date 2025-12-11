@@ -32,3 +32,11 @@ class ValidationMessage(MzTabBaseModel):
 class ValidationSummary(MzTabBaseModel):
     messages: Optional[List[ValidationMessage]] = None
     source_format: Literal["tsv", "json"] = "tsv"
+
+
+class CrossCheckWarning(UserWarning):
+    def __init__(self, message):
+        self.message = message
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}: {self.message!r}"

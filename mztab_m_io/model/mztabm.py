@@ -7,6 +7,7 @@ from typing import (
     OrderedDict,
     Union,
 )
+import warnings
 
 from pydantic import (
     BaseModel,
@@ -27,12 +28,7 @@ from mztab_m_io.model.section.mtd import Metadata
 from mztab_m_io.model.section.sme import SmallMoleculeEvidence
 from mztab_m_io.model.section.smf import SmallMoleculeFeature
 from mztab_m_io.model.section.sml import SmallMoleculeSummary
-from mztab_m_io.model.validation import (
-    Category,
-    MessageType,
-    ValidationMessage,
-    ValidationSummary,
-)
+from mztab_m_io.model.validation import CrossCheckWarning
 
 
 class MzTabM(MzTabBaseModel):
@@ -182,9 +178,8 @@ class MzTabM(MzTabBaseModel):
     ) -> "MzTabM":
         if isinstance(data, MzTabM):
             return handler(data)
-        if isinstance(info.context, ValidationSummary):
-            if info.context.source_format == "json":
-                return handler(data)
+        if info.context.get("source_format") == "json":
+            return handler(data)
 
         if isinstance(data, (dict, OrderedDict)):
             mztabm = data
@@ -193,11 +188,7 @@ class MzTabM(MzTabBaseModel):
 
         model = handler(mztabm)
         cls.update_ids(model)
-        messages: List[ValidationMessage] = []
-        if isinstance(info.context, ValidationSummary):
-            messages = info.context.messages
-
-        model.cross_check(messages)
+        model.cross_check()
         return model
 
     @classmethod
@@ -235,18 +226,13 @@ class MzTabM(MzTabBaseModel):
 
         return mztabm
 
-    def cross_check(self, messages: List[ValidationMessage]) -> List[ValidationMessage]:
-        if messages is None:
-            messages = []
-        references = self._get_reference_dict(messages)
-
-        reference_hits = self._check_referenced_items(references, messages)
-
-        self._check_unreferenced_items(reference_hits, messages)
-        return messages
+    def cross_check(self) -> None:
+        references = self._get_reference_dict()
+        reference_hits = self._check_referenced_items(references)
+        self._check_unreferenced_items(reference_hits)
 
     def _check_referenced_items(
-        self, references: dict[str, dict[int, Any]], messages: List[ValidationMessage]
+        self, references: dict[str, dict[int, Any]]
     ) -> dict[str, dict[int, int]]:
         reference_hits: dict[str, dict[int, int]] = {}
         for k, v in references.items():
@@ -296,7 +282,6 @@ class MzTabM(MzTabBaseModel):
                             referenced_field,
                             list_item,
                             reference_hits,
-                            messages,
                         )
                 elif target:
                     field_ref_name = (
@@ -313,29 +298,22 @@ class MzTabM(MzTabBaseModel):
                         referenced_field,
                         target,
                         reference_hits,
-                        messages,
                     )
         return reference_hits
 
     def _check_unreferenced_items(
         self,
         reference_hits: dict[str, dict[int, int]],
-        messages: List[ValidationMessage],
     ):
         for k, v in reference_hits.items():
             for idx, hit in v.items():
                 if hit < 1:
-                    messages.append(
-                        ValidationMessage(
-                            category=Category.CROSS_CHECK,
-                            message_type=MessageType.WARNING,
-                            message=f"{k}[{idx}] is not referenced in the file",
-                        )
+                    warnings.warn(
+                        f"{k}[{idx}] is not referenced in the file",
+                        CrossCheckWarning,
                     )
 
-    def _get_reference_dict(
-        self, messages: List[ValidationMessage]
-    ) -> dict[str, dict[int, Any]]:
+    def _get_reference_dict(self) -> dict[str, dict[int, Any]]:
         references: dict[str, dict[int, Any]] = {}
 
         for indexed_field in ["assay", "instrument", "sample", "ms_run"]:
@@ -347,22 +325,15 @@ class MzTabM(MzTabBaseModel):
                 if isinstance(item, IdentifiableModel):
                     references[indexed_field][item.id] = item
                     if item.id != idx + 1:
-                        messages.append(
-                            ValidationMessage(
-                                category=Category.CROSS_CHECK,
-                                message_type=MessageType.WARNING,
-                                message=f"metadata {indexed_field} item at index {idx} "
-                                f"has different id {item.id}",
-                            )
+                        warnings.warn(
+                            f"metadata {indexed_field} item at index {idx} "
+                            f"has different id {item.id}",
                         )
                 else:
-                    messages.append(
-                        ValidationMessage(
-                            category=Category.CROSS_CHECK,
-                            message_type=MessageType.WARNING,
-                            message=f"metadata {indexed_field} item at index {idx} "
-                            f"is not valid {str(item)}",
-                        )
+                    warnings.warn(
+                        f"metadata {indexed_field} item at index {idx} "
+                        f"is not valid {str(item)}",
+                        CrossCheckWarning,
                     )
 
         for section, indexed_field in [
@@ -388,7 +359,6 @@ class MzTabM(MzTabBaseModel):
         referenced_field: str,
         target: BaseModel,
         reference_hits: dict[str, dict[int, Any]],
-        messages: List[ValidationMessage],
     ):
         subfield_vals = getattr(target, subfield)
         indexed_items = references.get(referenced_field, {})
@@ -397,26 +367,20 @@ class MzTabM(MzTabBaseModel):
                 if idx in indexed_items:
                     reference_hits[referenced_field][idx] += 1
                 else:
-                    messages.append(
-                        ValidationMessage(
-                            category=Category.CROSS_CHECK,
-                            message_type=MessageType.WARNING,
-                            message=f"{field_ref} -> {subfield}[{i}] value "
-                            f"{referenced_field}[{idx}] is not defined.",
-                        )
+                    warnings.warn(
+                        f"{field_ref} -> {subfield}[{i}] value "
+                        f"{referenced_field}[{idx}] is not defined.",
+                        CrossCheckWarning,
                     )
         elif isinstance(subfield_vals, int):
             idx = subfield_vals
             if idx in indexed_items:
                 reference_hits[referenced_field][idx] += 1
             else:
-                messages.append(
-                    ValidationMessage(
-                        category=Category.CROSS_CHECK,
-                        message_type=MessageType.WARNING,
-                        message=f"{field_ref} -> {subfield} value "
-                        f"{referenced_field}[{idx}] is not defined ",
-                    )
+                warnings.warn(
+                    f"{field_ref} -> {subfield} value "
+                    f"{referenced_field}[{idx}] is not defined ",
+                    CrossCheckWarning,
                 )
 
     @classmethod
