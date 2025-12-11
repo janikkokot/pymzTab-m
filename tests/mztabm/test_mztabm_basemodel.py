@@ -1,3 +1,6 @@
+import warnings
+import pytest
+import pydantic
 import mztab_m_io
 from pathlib import Path
 
@@ -11,13 +14,11 @@ def test_no_id(tmp_path):
     lines = (line for line in lines if not line.startswith("MTD\tmzTab-ID"))
     invalid_mztab = tmp_path / "invalid.mztab"
     invalid_mztab.write_text("\n".join(lines))
-
-    result: mztab_m_io.MzTabMLoadResult = mztab_m_io.read(invalid_mztab)
-
-    assert len(result.messages) == 1
-    captured_error = result.messages[0]
-    assert captured_error.message_type == mztab_m_io.MessageType.ERROR
-    assert "mzTab-ID" in captured_error.message
+    with pytest.raises(pydantic.ValidationError) as error:
+        mztabm = mztab_m_io.MzTabM = mztab_m_io.read(invalid_mztab)
+    assert error.value.error_count() == 1
+    error = error.value.errors()[0]
+    assert "mzTab-ID" in error["loc"]
 
 
 def test_no_sample(tmp_path):
@@ -30,12 +31,9 @@ def test_no_sample(tmp_path):
     invalid_mztab = tmp_path / "invalid.mztab"
     invalid_mztab.write_text("\n".join(lines))
 
-    result: mztab_m_io.MzTabMLoadResult = mztab_m_io.read(invalid_mztab)
-    assert result.success
-    errors = [
-        m for m in result.messages if m.message_type == mztab_m_io.MessageType.ERROR
-    ]
-    assert len(errors) == 0
+    with warnings.catch_warnings(record=True) as w:
+        mztabm: mztab_m_io.MzTabM = mztab_m_io.read(invalid_mztab)
+        assert len(w) > 0
 
 
 def test_no_assay(tmp_path):
@@ -48,13 +46,11 @@ def test_no_assay(tmp_path):
     invalid_mztab = tmp_path / "invalid.mztab"
     invalid_mztab.write_text("\n".join(lines))
 
-    result: mztab_m_io.MzTabMLoadResult = mztab_m_io.read(invalid_mztab)
-    assert not result.success
-    errors = [
-        m for m in result.messages if m.message_type == mztab_m_io.MessageType.ERROR
-    ]
-    assert len(errors) == 1
-    assert "assay" in errors[0].message
+    with pytest.raises(pydantic.ValidationError) as error:
+        mztabm = mztab_m_io.MzTabM = mztab_m_io.read(invalid_mztab)
+    assert error.value.error_count() == 1
+    error = error.value.errors()[0]
+    assert "assay" in error["loc"]
 
 
 def test_multiple_errors(tmp_path):
@@ -71,9 +67,6 @@ def test_multiple_errors(tmp_path):
     invalid_mztab = tmp_path / "invalid.mztab"
     invalid_mztab.write_text("\n".join(lines))
 
-    result: mztab_m_io.MzTabMLoadResult = mztab_m_io.read(invalid_mztab)
-    assert not result.success
-    errors = [
-        m for m in result.messages if m.message_type == mztab_m_io.MessageType.ERROR
-    ]
-    assert len(errors) == 2
+    with pytest.raises(pydantic.ValidationError) as error:
+        mztabm = mztab_m_io.MzTabM = mztab_m_io.read(invalid_mztab)
+    assert error.value.error_count() == 2
