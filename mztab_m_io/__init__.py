@@ -1,50 +1,16 @@
 import json
 import pathlib
-from typing import Annotated, Any, Optional
+from typing import Any
+import warnings
 
 import yaml
-from pydantic import Field, ValidationError
 from typing_extensions import Literal
 
 from mztab_m_io.model.mztabm import MzTabM
 from mztab_m_io.model.serialization import SerializationContext
-from mztab_m_io.model.validation import (
-    Category,
-    MessageType,
-    ValidationMessage,
-    ValidationSummary,
-)
 
 
-class MzTabMLoadResult(ValidationSummary):
-    """Result object containing the loaded MzTabM data and validation information.
-
-    This class extends ValidationSummary to include the loading status and
-    the parsed MzTabM object. It's used as the return type for loading and
-    parsing operations to provide both the result and any validation messages
-    or errors that occurred during the process.
-    """
-
-    success: Annotated[
-        bool,
-        Field(
-            default=False,
-            description="Indicates whether the loading operation was successful",
-        ),
-    ] = None
-
-    mztabm: Annotated[
-        Optional[MzTabM],
-        Field(
-            default=None,
-            description="The loaded and validated MzTabM object, if successful",
-        ),
-    ] = None
-
-
-def read(
-    file_path: str, format: Literal["tsv", "json", "yaml"] = "tsv"
-) -> MzTabMLoadResult:
+def read(file_path: str, format: Literal["tsv", "json", "yaml"] = "tsv") -> MzTabM:
     """Read and parse an mzTab-M file in TSV, JSON, or YAML format.
 
     This function reads an mzTab-M formatted file and attempts to parse it into an MzTabM object.
@@ -58,24 +24,25 @@ def read(
             - "yaml": YAML format
 
     Returns:
-        MzTabMLoadResult containing:
-            - success: Boolean indicating if parsing was successful
-            - mztabm: The parsed MzTabM object if successful, None otherwise
-            - messages: List of validation messages or errors encountered
+        The parsed MzTabM object
 
     Raises:
+        ValidationError: If specified file violates the data model
         ValueError: If file_path is empty or format is invalid
         FileNotFoundError: If the specified file does not exist
 
     Example:
-        >>> result = read("example.mztab", format="tsv")
-        >>> if result.success:
-        ...     mztabm = result.mztabm
-        ...     print(f"Loaded mzTab-M file with {len(result.messages)} messages")
-        ... else:
-        ...     print("Failed to load file")
-        ...     for msg in result.messages:
-        ...         print(f"{msg.message_type}: {msg.message}")
+        >>> import warnings
+        >>> with warnings.catch_warnings(record=True) as w:
+        ...     try:
+        ...         mztabm = read("example.mztab", format="tsv")
+        ...     except Exception as error:
+        ...         print("Failed to load file")
+        ...         raise error
+        ...     else:
+        ...         print(f"Loaded mzTab-M file")
+        ...     finally:
+        ...         print(f"Encountered {len(w)} warnings")
     """
     if not file_path:
         raise ValueError("Invalid file path")
@@ -88,33 +55,19 @@ def read(
 
     if format == "tsv":
         content = input_path.read_text()
-        result = MzTabMLoadResult(success=False, messages=[], source_format="tsv")
-        try:
-            mztabm = MzTabM.model_validate(content, by_alias=True, context=result)
-            result.mztabm = mztabm
-            result.success = True
-        except ValidationError as ex:
-            result.messages.extend(
-                [
-                    ValidationMessage(
-                        category=Category.FORMAT,
-                        message_type=MessageType.ERROR,
-                        message=repr(x),
-                    )
-                    for x in ex.errors()
-                ]
-            )
-        return result
     elif format == "json":
         with input_path.open() as f:
             content = json.load(f)
     elif format == "yaml":
         with input_path.open() as f:
             content = yaml.safe_load(f)
+        format = "json"
     else:
         raise ValueError(f"invalid format type: {format}")
 
-    return load_from_dict(content)
+    return MzTabM.model_validate(
+        content, by_alias=True, context=dict(source_format=format)
+    )
 
 
 def write(
@@ -177,7 +130,7 @@ def write(
     return True
 
 
-def load_from_dict(data: dict[str, Any]) -> MzTabMLoadResult:
+def load_from_dict(data: dict[str, Any]) -> MzTabM:
     """Load and validate an MzTabM object from a dictionary.
 
     This function takes a dictionary representation of an mzTab-M file and attempts to
@@ -189,10 +142,7 @@ def load_from_dict(data: dict[str, Any]) -> MzTabMLoadResult:
              the mzTab-M specification with proper field names and nested objects.
 
     Returns:
-        MzTabMLoadResult containing:
-            - success: Boolean indicating if loading was successful
-            - mztabm: The loaded MzTabM object if successful, None otherwise
-            - messages: List of validation messages or errors encountered
+        The parsed MzTabM object
 
     Example:
         >>> result = load_from_dict(data)
@@ -204,31 +154,12 @@ def load_from_dict(data: dict[str, Any]) -> MzTabMLoadResult:
         ...     for msg in result.messages:
         ...         print(f"{msg.message_type}: {msg.message}")
     """
-    result = MzTabMLoadResult(success=False, messages=[], source_format="json")
-    try:
-        mztabm = MzTabM.model_validate(data, by_alias=True, context=result)
-        result.mztabm = mztabm
-        result.success = True
-    except ValidationError as ex:
-        result.messages.extend(
-            [
-                ValidationMessage(
-                    category=Category.FORMAT,
-                    message_type=MessageType.ERROR,
-                    message=repr(x),
-                )
-                for x in ex.errors()
-            ]
-        )
-    except Exception as ex:
-        result.messages.append(
-            ValidationMessage(
-                category=Category.FORMAT,
-                message_type=MessageType.ERROR,
-                message=str(ex),
-            )
-        )
-    return result
+    warnings.warn(
+        message="Directly validate the MzTabM object", category=DeprecationWarning
+    )
+    return MzTabM.model_validate(
+        data, by_alias=True, context=dict(source_format="json")
+    )
 
 
 def convert_to_dict(mztabm: MzTabM) -> dict[str, Any]:
