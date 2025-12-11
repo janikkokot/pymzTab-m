@@ -22,7 +22,6 @@ from pydantic import (
 from mztab_m_io.model import CustomSerializer, IdentifiableModel, MzTabBaseModel
 from mztab_m_io.model.field_utils import sanitize_str
 from mztab_m_io.model.serialization import MetadataSerialization
-from mztab_m_io.model.validation import ValidationSummary
 
 AdductIon = Annotated[str, Field(pattern=r"^\[\d*M([+-][\w\d]+)*\]\d*[+-]$")]
 
@@ -51,15 +50,17 @@ class Parameter(IdentifiableModel, CustomSerializer):
     @model_validator(mode="wrap")
     @classmethod
     def validate_model(
-        cls, data: Any, handler: ModelWrapValidatorHandler["Parameter"], info: ValidationInfo
+        cls,
+        data: Any,
+        handler: ModelWrapValidatorHandler["Parameter"],
+        info: ValidationInfo,
     ) -> "Parameter":
         if not data:
             return None
         if isinstance(data, Parameter):
             return handler(data)
-        if isinstance(info.context, ValidationSummary):
-            if info.context.source_format == "json":
-                return handler(data)
+        if info.context and info.context.get("source_format") == "json":
+            return handler(data)
         val = data
         if isinstance(val, (dict, OrderedDict)):
             if len(val) == 1 and None in val:
@@ -162,13 +163,15 @@ class PublicationItem(MzTabBaseModel, CustomSerializer):
     @model_validator(mode="wrap")
     @classmethod
     def deserialize(
-        cls, data: Any, handler: ModelWrapValidatorHandler["PublicationItem"], info: ValidationInfo
+        cls,
+        data: Any,
+        handler: ModelWrapValidatorHandler["PublicationItem"],
+        info: ValidationInfo,
     ) -> "PublicationItem":
         if isinstance(data, PublicationItem):
             return handler(data)
-        if isinstance(info.context, ValidationSummary):
-            if info.context.source_format == "json":
-                return handler(data)
+        if info.context and info.context.get("source_format") == "json":
+            return handler(data)
         val = data
         if isinstance(data, (OrderedDict, dict)):
             if len(data) == 1 and None in data:
@@ -513,13 +516,15 @@ class SpectraRef(MzTabBaseModel, CustomSerializer):
     @model_validator(mode="wrap")
     @classmethod
     def validate_model(
-        cls, data: Any, handler: ModelWrapValidatorHandler["SpectraRef"], info: ValidationInfo
+        cls,
+        data: Any,
+        handler: ModelWrapValidatorHandler["SpectraRef"],
+        info: ValidationInfo,
     ) -> "SpectraRef":
         if isinstance(data, SpectraRef):
             return handler(data)
-        if isinstance(info.context, ValidationSummary):
-            if info.context.source_format == "json":
-                return handler(data)
+        if info.context and info.context.get("source_format") == "json":
+            return handler(data)
         val = data
         if isinstance(val, (dict, OrderedDict)):
             if len(val) == 1 and None in val:

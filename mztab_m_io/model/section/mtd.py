@@ -44,7 +44,6 @@ from mztab_m_io.model.common import (
 )
 from mztab_m_io.model.field_utils import get_field_type_info
 from mztab_m_io.model.serialization import MetadataDictInfo, MetadataSerialization
-from mztab_m_io.model.validation import ValidationSummary
 
 
 class Metadata(MzTabBaseModel, CustomSerializer):
@@ -554,9 +553,8 @@ class Metadata(MzTabBaseModel, CustomSerializer):
     ) -> "Metadata":
         if isinstance(input_data, Metadata):
             return handler(input_data)
-        if isinstance(info.context, ValidationSummary):
-            if info.context.source_format == "json":
-                return handler(input_data)
+        if info.context and info.context.get("source_format") == "json":
+            return handler(input_data)
         lines = []
         if isinstance(input_data, str):
             lines = input_data.split("\n")
@@ -603,7 +601,9 @@ class Metadata(MzTabBaseModel, CustomSerializer):
                         str_val = val
                         if isinstance(val, (dict, OrderedDict)):
                             str_val = val.get(None)
-                        new_data[field_name] = field_type.model_validate(str_val, by_alias=True)
+                        new_data[field_name] = field_type.model_validate(
+                            str_val, by_alias=True
+                        )
             else:
                 if issubclass(field_type, int):
                     int_val = val
@@ -623,7 +623,9 @@ class Metadata(MzTabBaseModel, CustomSerializer):
                         else:
                             cls.update_dict(dict_info, item)
 
-                            new_list.append(field_type.model_validate(item, by_alias=True))
+                            new_list.append(
+                                field_type.model_validate(item, by_alias=True)
+                            )
                     new_data[field_name] = new_list or None
 
         return handler(new_data)

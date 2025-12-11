@@ -28,7 +28,14 @@ from mztab_m_io.model.section.mtd import Metadata
 from mztab_m_io.model.section.sme import SmallMoleculeEvidence
 from mztab_m_io.model.section.smf import SmallMoleculeFeature
 from mztab_m_io.model.section.sml import SmallMoleculeSummary
-from mztab_m_io.model.validation import CrossCheckWarning
+
+
+class CrossCheckWarning(UserWarning):
+    def __init__(self, message):
+        self.message = message
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}: {self.message!r}"
 
 
 class MzTabM(MzTabBaseModel):
@@ -178,7 +185,7 @@ class MzTabM(MzTabBaseModel):
     ) -> "MzTabM":
         if isinstance(data, MzTabM):
             return handler(data)
-        if info.context.get("source_format") == "json":
+        if info.context and info.context.get("source_format") == "json":
             return handler(data)
 
         if isinstance(data, (dict, OrderedDict)):
