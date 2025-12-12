@@ -1,3 +1,4 @@
+import warnings
 import re
 from typing import (
     Annotated,
@@ -630,54 +631,43 @@ class Metadata(MzTabBaseModel, CustomSerializer):
 
         return handler(new_data)
 
-    @model_serializer(mode="wrap")
-    def serialize_model(
-        self, handler: SerializerFunctionWrapHandler, info: SerializationInfo
-    ) -> Union[str, dict[str, Any]]:
-        default_success, result = self.serialize_to_json(handler, info)
-        if default_success:
-            return result
-        lines = []
-        self.serialize_object(self.prefix, "", self, lines)
-        return "\n".join(lines)
+    def __str__(self) -> str:
+        lines = self.serialize_object(prefix="", model=self)
+        return "\n".join(f"{self.prefix}\t{line}" for line in lines)
 
-    def serialize_object(
-        self, section: str, prefix: str, model: MzTabBaseModel, lines: List[str]
-    ):
+    def serialize_object(self, prefix: str, model: MzTabBaseModel) -> list[str]:
+        lines: list[str] = []
         for field, field_info in model.__class__.model_fields.items():
-            serializer_model = field_info.json_schema_extra
-            if field_info.json_schema_extra is None:
-                serializer_model = {}
+            serializer_model = field_info.json_schema_extra or {}
             extra = MetadataSerialization.model_validate(serializer_model)
             if extra.ignore:
                 continue
-            value = getattr(model, field, None)
             alias = field_info.alias if field_info.alias else field
             key_name = alias
             if prefix:
                 key_name = prefix if extra.object_level_value else f"{prefix}-{alias}"
 
-            if value is None:
+            try:
+                value = getattr(model, field)
+            except AttributeError:
                 continue
-            elif isinstance(value, (str, AnyUrl)):
-                line = f"{section}\t{key_name}\t{value or ''}"
+            if isinstance(value, (str, AnyUrl)):
+                line = f"{key_name}\t{value or ''}"
                 lines.append(line)
             elif isinstance(value, int):
-                if value is None:
-                    line = f"{section}\t{key_name}\t"
-                elif extra.referenced_field_name:
+                if extra.referenced_field_name:
                     ref = extra.referenced_field_name
-                    line = f"{section}\t{key_name}\t{ref}[{value}]"
+                    line = f"{key_name}\t{ref}[{value}]"
                 else:
-                    line = f"{section}\t{key_name}\t{value}"
+                    line = f"{key_name}\t{value}"
                 lines.append(line)
             elif isinstance(value, MzTabBaseModel):
                 if isinstance(value, Parameter):
                     line_value = value.model_dump(by_alias=True)
-                    line = f"{section}\t{key_name}\t{line_value or ''}"
+                    line = f"{key_name}\t{line_value or ''}"
                     lines.append(line)
                 else:
-                    self.serialize_object(section, key_name, value, lines)
+                    lines.extend(self.serialize_object(prefix=key_name, model=value))
             elif isinstance(value, list):
                 if not value:
                     continue
@@ -685,29 +675,27 @@ class Metadata(MzTabBaseModel, CustomSerializer):
                     separator = extra.list_concatenation_str
                     if separator:
                         line_value = separator.join([str(x) for x in value])
-                        line = f"{section}\t{key_name}\t{line_value}"
+                        line = f"{key_name}\t{line_value}"
                     else:
                         for idx, item in enumerate(value, start=1):
                             indexed_key_name = f"{key_name}[{idx}]"
-                            line = f"{section}\t{indexed_key_name}\t{item or ''}"
+                            line = f"{indexed_key_name}\t{item or ''}"
                             lines.append(line)
                 elif isinstance(value[0], int):
                     separator = extra.list_concatenation_str or "|"
                     if extra.referenced_field_name:
                         values = [f"{extra.referenced_field_name}[{x}]" for x in value]
                         line_value = separator.join(values)
-                        line = f"{section}\t{key_name}\t{line_value}"
+                        line = f"{key_name}\t{line_value}"
                     else:
                         values = [str(x) for x in value if x is not None]
-                        line = f"{section}\t{key_name}\t{separator.join(values)}"
+                        line = f"{key_name}\t{separator.join(values)}"
                     lines.append(line)
                 elif isinstance(value[0], MzTabBaseModel):
                     separator = extra.list_concatenation_str or None
                     if separator:
-                        line_value = separator.join(
-                            [x.model_dump(by_alias=True) for x in value]
-                        )
-                        line = f"{section}\t{key_name}\t{line_value or ''}"
+                        line_value = separator.join([str(x) for x in value])
+                        line = f"{key_name}\t{line_value or ''}"
                         lines.append(line)
                     else:
                         for idx, item in enumerate(value, start=1):
@@ -720,16 +708,17 @@ class Metadata(MzTabBaseModel, CustomSerializer):
                                     indexed_key_name = f"{key_name}[{id_val}]"
                             if isinstance(item, Parameter):
                                 line_value = item.model_dump(by_alias=True)
-                                line = (
-                                    f"{section}\t{indexed_key_name}\t{line_value or ''}"
-                                )
+                                line = f"{indexed_key_name}\t{line_value or ''}"
                                 lines.append(line)
                             else:
-                                self.serialize_object(
-                                    section, indexed_key_name, item, lines
+                                lines.extend(
+                                    self.serialize_object(
+                                        prefix=indexed_key_name, model=item
+                                    )
                                 )
                 else:
-                    print("not expected")
+                    warnings.warn("not expected")
 
             else:
-                print("Skipping unsupported value", key_name, extra)
+                warnings.warn(f"Skipping unsupported value {key_name!r} {extra!r}")
+        return lines
