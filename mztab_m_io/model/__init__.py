@@ -74,9 +74,8 @@ class MzTabBaseModel(BaseModel):
             if prefix:
                 key_name = prefix if extra.object_level_value else f"{prefix}-{alias}"
 
-            try:
-                value = getattr(self, field)
-            except AttributeError:
+            value = getattr(self, field, None)
+            if value is None:
                 continue
             if isinstance(value, (str, AnyUrl)):
                 line = f"{key_name}\t{value or ''}"
