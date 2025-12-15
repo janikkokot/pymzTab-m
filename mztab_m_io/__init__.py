@@ -108,14 +108,9 @@ def write(
         raise ValueError("Invalid file format.")
 
     if format == "tsv":
-        result = mztabm.model_dump(
-            context=SerializationContext(convert_to=format),
-            by_alias=True,
-            exclude_none=True,
-        )
+        result = str(mztabm)
     elif format in {"json", "yaml"}:
         result = mztabm.model_dump_json(
-            context=SerializationContext(convert_to="json"),
             by_alias=True,
             indent=2,
             exclude_none=True,

@@ -12,10 +12,7 @@ from pydantic import (
     AnyUrl,
     Field,
     ModelWrapValidatorHandler,
-    SerializationInfo,
-    SerializerFunctionWrapHandler,
     ValidationInfo,
-    model_serializer,
     model_validator,
 )
 
@@ -32,20 +29,17 @@ class Parameter(IdentifiableModel, CustomSerializer):
     name: Optional[str] = None
     value: Optional[str] = None
 
-    @model_serializer(mode="wrap")
-    def serialize_model(
-        self, handler: SerializerFunctionWrapHandler, info: SerializationInfo
-    ) -> Union[str, dict[str, Any]]:
-        default_success, result = self.serialize_to_json(handler, info)
-        if default_success:
-            return result
-
+    def __str__(self) -> str:
         return (
             f"[{sanitize_str(self.cv_label)}, "
             f"{sanitize_str(self.cv_accession)}, "
             f"{sanitize_str(self.name)}, "
             f"{sanitize_str(self.value)}]"
         )
+
+    def serialize(self, prefix: str) -> list[str]:
+        line_value = str(self) or ""
+        return [f"{prefix}\t{line_value}"]
 
     @model_validator(mode="wrap")
     @classmethod
@@ -151,13 +145,7 @@ class PublicationItem(MzTabBaseModel, CustomSerializer):
         str, Field(description="The native accession id for this publication item.")
     ]
 
-    @model_serializer(mode="wrap")
-    def serialize_model(
-        self, handler: SerializerFunctionWrapHandler, info: SerializationInfo
-    ) -> Union[str, dict[str, Any]]:
-        default_success, result = self.serialize_to_json(handler, info)
-        if default_success:
-            return result
+    def __str__(self) -> str:
         return f"{sanitize_str(self.type)}:{sanitize_str(self.accession)}"
 
     @model_validator(mode="wrap")
@@ -504,13 +492,7 @@ class SpectraRef(MzTabBaseModel, CustomSerializer):
         ),
     ]
 
-    @model_serializer(mode="wrap")
-    def serialize_model(
-        self, handler: SerializerFunctionWrapHandler, info: SerializationInfo
-    ) -> Union[str, dict[str, Any]]:
-        default_success, result = self.serialize_to_json(handler, info)
-        if default_success:
-            return result
+    def __str__(self) -> str:
         return f"ms_run[{self.ms_run}]:{self.reference}"
 
     @model_validator(mode="wrap")
@@ -557,13 +539,7 @@ class ColumnParameterMapping(MzTabBaseModel, CustomSerializer):
         ),
     ]
 
-    @model_serializer(mode="wrap")
-    def serialize_model(
-        self, handler: SerializerFunctionWrapHandler, info: SerializationInfo
-    ) -> Union[str, dict[str, Any]]:
-        default_success, result = self.serialize_to_json(handler, info)
-        if default_success:
-            return result
+    def __str__(self) -> str:
         return (
             f"{sanitize_str(self.column_name)}={sanitize_str(self.param.serialize())}"
         )

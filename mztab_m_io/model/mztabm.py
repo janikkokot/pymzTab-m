@@ -151,18 +151,12 @@ class MzTabM(MzTabBaseModel):
                 sections[section].append(line)
         return sections
 
-    @model_serializer(mode="wrap")
-    def serialize_model(
-        self, handler: SerializerFunctionWrapHandler, info: SerializationInfo
-    ) -> Union[str, dict[str, Any]]:
-        default_success, result = self.serialize_to_json(handler, info)
-        if default_success:
-            return result
-        summary = [x.model_dump(by_alias=True) for x in self.small_molecule_summary]
-        feature = [x.model_dump(by_alias=True) for x in self.small_molecule_feature]
-        evidence = [x.model_dump(by_alias=True) for x in self.small_molecule_evidence]
+    def __str__(self) -> str:
+        summary = [str(x) for x in self.small_molecule_summary]
+        feature = [str(x) for x in self.small_molecule_feature]
+        evidence = [str(x) for x in self.small_molecule_evidence]
         plain = [
-            self.metadata.model_dump(),
+            str(self.metadata),
             "\n",
             SmallMoleculeSummary.get_table_header(self.small_molecule_summary),
         ]

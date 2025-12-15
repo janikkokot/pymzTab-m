@@ -49,7 +49,7 @@ class BaseTableSection(MzTabBaseModel, CustomSerializer):
         if str(val).lower() == "nan" or val == float("nan"):
             return "NaN"
         if isinstance(val, MzTabBaseModel):
-            return val.model_dump(by_alias=True)
+            return str(val)
         if isinstance(val, float):
             if val.is_integer():
                 return f"{int(val)}"
@@ -58,14 +58,8 @@ class BaseTableSection(MzTabBaseModel, CustomSerializer):
             return [cls.serialize_value(x) for x in val]
         return str(val)
 
-    @model_serializer(mode="wrap")
-    def serialize_model(
-        self, handler: SerializerFunctionWrapHandler, info: SerializationInfo
-    ) -> Union[str, dict[str, Any]]:
-        default_success, result = self.serialize_to_json(handler, info)
-        if default_success:
-            return result
-        row = []
+    def __str__(self) -> str:
+        row: list[str] = []
         for field, field_info in self.__class__.model_fields.items():
             extra = field_info.json_schema_extra or {}
             field_name = field_info.validation_alias or field
